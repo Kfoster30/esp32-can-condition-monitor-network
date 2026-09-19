@@ -1,0 +1,20 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test-and-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Test wire protocol
+        run: python -m unittest discover -s tools -p "test_*.py" -v
+      - name: Install PlatformIO
+        run: python -m pip install platformio
+      - name: Build both ECU roles
+        run: platformio run
