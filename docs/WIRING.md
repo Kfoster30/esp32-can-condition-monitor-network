@@ -16,6 +16,14 @@ The finished two-node bus needs exactly two 120-ohm terminators, one at each
 physical end. With both boards unpowered and the complete bus connected, the
 resistance measured between CANH and CANL should be approximately 60 ohms.
 
+## Verified modules
+
+On 2026-09-19, both selected SN65HVD230 modules measured approximately 123 ohms
+between CANH and CANL while disconnected. Both modules therefore contain
+onboard termination. No external 120-ohm resistors should be added to this
+two-node bench bus. The predicted complete-bus resistance is approximately
+61.5 ohms.
+
 ## Connections for each ECU
 
 | SN65HVD230 module | ESP32 |
@@ -48,4 +56,3 @@ common ground between boards.
 7. Cable is short for the initial bench test.
 
 After these checks, power the dashboard ECU first and the sensor ECU second.
-
