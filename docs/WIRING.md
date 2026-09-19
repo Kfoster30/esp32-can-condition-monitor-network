@@ -30,8 +30,12 @@ two-node bench bus. The predicted complete-bus resistance is approximately
 |---|---|
 | VCC / 3V3 | 3V3 |
 | GND | GND |
-| CTX / TXD | GPIO17 |
-| CRX / RXD | GPIO16 |
+| CTX / TXD | GPIO17, commonly labeled `TX2` |
+| CRX / RXD | GPIO16, commonly labeled `RX2` |
+
+Many ESP32 DevKit boards do not use Arduino-style `D16` and `D17` labels.
+`RX2` is GPIO16 and `TX2` is GPIO17; these labels identify the same physical
+pins. The firmware uses them as CAN controller signals rather than as a UART.
 
 Between modules:
 
