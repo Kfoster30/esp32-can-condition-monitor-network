@@ -1,10 +1,58 @@
 #pragma once
 
-#include <Arduino.h>
+#include <stddef.h>
+#include <stdint.h>
 
 namespace protocol {
 
 constexpr size_t kPayloadLength = 8;
+
+// Heartbeat bit 0 means at least one channel is simulated, not necessarily all.
+constexpr uint8_t kFlagAnySimulated = 0x01;
+constexpr uint8_t kFlagDhtTemperature = 0x02;
+constexpr uint8_t kFlagInaPower = 0x04;
+constexpr uint8_t kFlagMpuMotion = 0x08;
+constexpr uint8_t kWarnMotionMissing = 0x10;
+constexpr uint16_t kMotionUnavailable = 0xFFFF;
+constexpr uint8_t kMotionQualityMissing = 0;
+constexpr uint8_t kMotionQualityValid = 100;
+constexpr uint8_t kWarnPowerMissing = 0x20;
+constexpr uint16_t kBusUnavailable = 0xFFFF;
+constexpr int16_t kCurrentUnavailable = -32768;
+
+constexpr bool validSourceFlags(uint8_t flags) {
+  // This revision enables hardware motion only in the combined sensor build.
+  return flags == (kFlagAnySimulated | kFlagDhtTemperature | kFlagInaPower | kFlagMpuMotion) ||
+         ((flags & kFlagAnySimulated) != 0 && (flags & 0xF8u) == 0);
+}
+
+constexpr bool validHardwareMotionEncoding(uint8_t quality, uint16_t motionMg) {
+  return motionMg == kMotionUnavailable ? quality == kMotionQualityMissing
+                                       : quality == kMotionQualityValid;
+}
+
+constexpr bool validPowerEncoding(uint16_t bus, int16_t current) {
+  return (bus == kBusUnavailable) == (current == kCurrentUnavailable);
+}
+
+constexpr bool powerMissing(uint16_t bus, int16_t current) {
+  return bus == kBusUnavailable && current == kCurrentUnavailable;
+}
+// Reserved condition-warning bits describe temperature data quality, not a
+// temperature-limit alarm. Missing values must carry the int16 sentinel.
+constexpr uint8_t kWarnTemperatureMissing = 0x40;
+constexpr uint8_t kWarnTemperatureStale = 0x80;
+constexpr int16_t kTemperatureUnavailable = -32768;
+
+constexpr bool validTemperatureEncoding(uint8_t warnings, int16_t value) {
+  return (warnings & kWarnTemperatureMissing)
+      ? (!(warnings & kWarnTemperatureStale) && value == kTemperatureUnavailable)
+      : value != kTemperatureUnavailable;
+}
+
+constexpr bool sessionFresh(bool known, uint32_t lastMs, uint32_t now, uint32_t limitMs) {
+  return known && static_cast<uint32_t>(now - lastMs) <= limitMs;
+}
 
 enum class SystemState : uint8_t {
   kSelfTest = 0,
@@ -19,6 +67,15 @@ struct Heartbeat {
   uint8_t sequence;
   uint8_t flags;
   uint32_t uptimeSeconds;
+};
+
+// Repeated before each due publication batch. No sequence counter is needed on
+// this control frame: bootId identifies the epoch of the following data frames.
+struct Session {
+  uint8_t protocolVersion;
+  uint8_t role;
+  uint32_t bootId;
+  uint8_t flags;
 };
 
 struct Condition {
@@ -78,6 +135,14 @@ inline void encode(const Heartbeat& value, uint8_t* out) {
   putU32(&out[4], value.uptimeSeconds);
 }
 
+inline void encode(const Session& value, uint8_t* out) {
+  out[0] = value.protocolVersion;
+  out[1] = value.role;
+  putU32(&out[2], value.bootId);
+  out[6] = value.flags;
+  out[7] = 0;
+}
+
 inline void encode(const Condition& value, uint8_t* out) {
   out[0] = value.sequence;
   out[1] = static_cast<uint8_t>(value.state);
@@ -96,13 +161,23 @@ inline void encode(const MotionPower& value, uint8_t* out) {
 }
 
 inline bool decode(const uint8_t* data, size_t length, Heartbeat& out) {
-  if (length != kPayloadLength) return false;
+  if (length != kPayloadLength || data[0] != 1 || data[1] != 1 ||
+      !validSourceFlags(data[3])) return false;
   out = {data[0], data[1], data[2], data[3], getU32(&data[4])};
   return true;
 }
 
+inline bool decode(const uint8_t* data, size_t length, Session& out) {
+  if (length != kPayloadLength || data[0] != 1 || data[1] != 1 ||
+      !validSourceFlags(data[6]) || data[7] != 0) return false;
+  out = {data[0], data[1], getU32(&data[2]), data[6]};
+  return true;
+}
+
 inline bool decode(const uint8_t* data, size_t length, Condition& out) {
-  if (length != kPayloadLength || data[1] > 3) return false;
+  if (length != kPayloadLength || data[1] > 3 ||
+      ((data[2] & (kWarnPowerMissing | kWarnMotionMissing)) && data[1] != 2 && data[1] != 3) ||
+      !validTemperatureEncoding(data[2], getI16(&data[6]))) return false;
   out.sequence = data[0];
   out.state = static_cast<SystemState>(data[1]);
   out.warnings = data[2];
@@ -113,7 +188,8 @@ inline bool decode(const uint8_t* data, size_t length, Condition& out) {
 }
 
 inline bool decode(const uint8_t* data, size_t length, MotionPower& out) {
-  if (length != kPayloadLength) return false;
+  if (length != kPayloadLength ||
+      !validPowerEncoding(getU16(&data[4]), getI16(&data[6]))) return false;
   out.sequence = data[0];
   out.quality = data[1];
   out.vibrationMg = getU16(&data[2]);

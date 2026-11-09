@@ -8,3 +8,7 @@ __pycache__/
 data/*.csv
 data/*.log
 
+# Timestamped local telemetry captures; review before intentionally publishing.
+data/can-soak-*/
+data/mpu-pose-*/
+

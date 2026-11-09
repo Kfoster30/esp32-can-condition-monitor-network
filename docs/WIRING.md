@@ -60,3 +60,34 @@ common ground between boards.
 7. Cable is short for the initial bench test.
 
 After these checks, power the dashboard ECU first and the sensor ECU second.
+
+## Optional first hardware channel
+
+The 0.2.0 DHT11 build adds temperature on the **sensor** ESP32's GPIO4 without
+changing CAN wiring. The photographed three-pin module is labeled `+`, `out`,
+`-` and uses sensor 3V3, GPIO4, GND respectively. See [DHT11 integration](DHT11.md)
+for power-off wiring, source/quality labeling, firmware deployment order, and
+the still-pending hardware acceptance tests.
+
+## Combined DHT11/INA219 application
+
+Firmware 0.4.0's `esp32dev_sensor_dht11_ina219` uses the same tested logic/load
+wiring from the [INA219 diagnostic stages](INA219.md). No new connections are
+required: INA VCC/GND to sensor3V3/GND, SDA21, SCL22, DHT data4, CAN TX17/RX16.
+VIN+ connects to sensor3V3; VIN- feeds only the measured 331-ohm resistor/red-LED
+branch to sensorGND. Do not bypass its resistor or use an external supply. Only
+ground is shared with dashboard; do not tie the two regulated 3V3 outputs.
+See [combined integration](INA219_CAN.md) for deployment gates, the completed
+healthy 600-second CAN soak, and remaining integrated fault checks. Keep both
+boards unplugged before changing any wiring.
+
+## MPU6050-compatible communication stage
+
+The operator has reused the dismantled Project 1 HW-123 module and moved sensor
+3V3/GND distribution onto separate breadboard rails. MPU VCC/GND use those
+sensor-fed rails, SDA21/SCL22 share the INA219 signal bus, AD0 is grounded, and
+XDA/XCL/INT remain unused. These connections are operator-reported; photo
+overlap and an OL resistance reading are not a complete wiring/voltage audit.
+See [MPU6050 stage](MPU6050.md) for pin mapping, evidence boundaries, and the
+temporary read-only-register diagnostic. Do not change dashboard3V3 wiring or
+power either board during physical changes. Normal firmware motion stays SIM.
